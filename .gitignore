@@ -1,0 +1,11 @@
+# .env first and deliberately: the secret-scanning hook is the backstop, not
+# the control. A credential in git history has to be rotated, not deleted.
+.env
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage

@@ -1,0 +1,57 @@
+# ADR-3 puts a rule at the cheapest layer where its failure is still
+# recoverable. These two are here because their failures are not:
+#
+#   - A secret committed to git is not removable in practice. It has to be
+#     rotated, and rotation is manual today (ADR-5, item 5). Blocking it before
+#     it lands is the only cheap moment.
+#   - A job that has stopped reporting is indistinguishable from a job that was
+#     never scheduled. ADR-3 asks for health-contract conformance in CI; a job
+#     has no HTTP surface, so the equivalent contract is that it runs through
+#     `jobs.run()` under a service identity. See scripts/check_job_contract.py.
+#
+# `--no-verify` still works and is not being removed (ADR-3). The bypass is
+# recorded, and that record is the actual control.
+
+repos:
+  # --- Secret scanning ---------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # --- Platform contract -------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: job-contract
+        name: job contract (ADR-3)
+        # EXPORT_INTERVAL_SECONDS=0 is the production shape: one run, then exit.
+        # The demo loop would hang the hook, and the check says so if you forget.
+        entry: env EXPORT_INTERVAL_SECONDS=0 python scripts/check_job_contract.py spend_export.main
+        language: system
+        pass_filenames: false
+        files: ^(src/|pyproject\.toml$)
+
+      - id: tests
+        name: pytest
+        entry: pytest -q
+        language: system
+        pass_filenames: false
+        files: ^(src/|tests/)
+
+  # --- Style: convention layer, so it is advisory and fast ----------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
